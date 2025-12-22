@@ -1,0 +1,13 @@
+*.npy
+*.npz
+*.so
+
+test*
+temp*
+
+*.egg-info/
+build
+dist
+__pycache__
+
+.vscode

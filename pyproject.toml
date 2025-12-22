@@ -1,0 +1,16 @@
+[project]
+name = "torchfinufft-ryan"
+version = "0.0.0"
+dependencies = ["numpy", "torch", "finufft", "cufinufft"]
+
+description = "NUFFT module for PyTorch."
+keywords = ["NUFFT", "PyTorch"]
+authors = [{name = "Ryan", email = "ryan_shanghaitech@proton.me"}]
+
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
+
+[project.urls]
+Repository = "https://github.com/RyanShanghaitech/torchfinufft"
+Examples = "https://github.com/RyanShanghaitech/torchfinufft/tree/main/example"
