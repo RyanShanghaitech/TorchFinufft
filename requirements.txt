@@ -1,5 +1,8 @@
 numpy
+matplotlib
 torch
 finufft
 cufinufft
 MRPhantom
+MRArbGrad
+MRArbDcf
