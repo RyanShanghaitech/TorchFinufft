@@ -4,11 +4,12 @@ from torch import Tensor, Size
 import torch.nn as nn
 import cufinufft, finufft
 from finufft import Plan
+from typing import Literal
 
 class Nufft(nn.Module):
-    def __init__(self, nufft_type:int, n_modes:tuple, batch_shape:Size, pts:Tensor):
+    def __init__(self, nufft_type:int, n_modes:tuple, batch_shape:Size, pts:Tensor, dev:torch.device|str="cuda"):
         super().__init__()
-        pts = torch.as_tensor(pts)
+        pts = torch.as_tensor(pts, device=dev)
         
         nAx = len(n_modes)
         n_trans = prod(batch_shape).astype(int).item()

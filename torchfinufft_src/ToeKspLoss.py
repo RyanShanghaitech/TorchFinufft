@@ -2,6 +2,7 @@ import torch
 from torch import Tensor, nn
 from torch.autograd.function import FunctionCtx
 import torch.nn.functional as F
+from typing import Literal
 from .utility import fftnc, ifftnc
 import finufft, cufinufft
 
@@ -22,21 +23,23 @@ class ToeKspL2Loss(nn.Module):
     where F is NUFFT, x,y are vectors (typically are images and k-space groundtruth), W are density compensation function.
     For optimization (by Toeplitz operator replacement), we need the sampling pattern in F, and corresponding W for initialization.
     '''
-    def __init__(self, tenK:Tensor, tenW:Tensor, tupSizeImg:tuple, tenS0:Tensor):
+    def __init__(self, tenK:Tensor, tenW:Tensor, tupSizeImg:tuple, tenS0:Tensor, dev:torch.device|str="cuda"):
         '''
         :param tenK: k-space coordinate in `/pix`
         :type tenK: Tensor[nK,nAx]
-        :param tenW: density compensation function
+        :param tenW: squared root of the density compensation function
         :type tenW: Tensor[nK]
         :param tupSizeImg: image shape
         :type tupSizeImg: tuple[nAx]
         :param tenS0: k-space groundtruth
         :type tenS0: Tensor[nPass,nK]
+        :param dev: device 
+        :type dev: Tensor[nPass,nK]
         '''
         super().__init__()
-        tenK = torch.as_tensor(tenK)
-        tenW = torch.as_tensor(tenW)
-        tenS0 = torch.as_tensor(tenS0)
+        tenK = torch.as_tensor(tenK, device=dev)
+        tenW = torch.as_tensor(tenW, device=dev)
+        tenS0 = torch.as_tensor(tenS0, device=dev)
         
         if tenW.shape[-1]!=tenS0.shape[-1]:
             raise AssertionError("tenW.shape[-1]!=tenS0.shape[-1]")
