@@ -72,7 +72,7 @@ class ToeKspL2Loss(nn.Module):
         else: raise NotImplementedError("device")
         plan = fn.Plan(1, self.tupSizeImg_2x, self.nPass, dtype="complex64")
         ten2PiKT = (2*torch.pi)*tenK.T[:self.nAx]
-        plan.setpts(*(ten2PiKT.contiguous().numpy() if fn==finufft else ten2PiKT))
+        plan.setpts(*(ten2PiKT.contiguous().numpy() if fn==finufft else ten2PiKT.contiguous()))
         _tenW = tenW.contiguous().numpy() if fn==finufft else tenW.contiguous()
         tenImgKer:Tensor = torch.as_tensor(plan.execute(_tenW.conj()*_tenW), device=tenS0.device) # 2x
         tenKspApo:Tensor = fftnc(tenImgKer, 1+torch.arange(self.nAx)) # 2x
