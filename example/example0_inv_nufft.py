@@ -5,15 +5,18 @@ from matplotlib.pyplot import *
 import torch
 import torch.nn as nn
 from torch.types import Tensor, Size
-from skimage.data import shepp_logan_phantom
 
 from torchfinufft import *
 from time import time
 import slime
 import mrarbgrad as mag
+import mrarbdcf as mad
 
-# 2. Setup Data and Simulate K-space
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# parameters
+useToeplitz = 0
+usePrecond = 1
+sDev = "cuda" if torch.cuda.is_available() else "cpu"
+device = torch.device(sDev)
 
 # Get Shepp-Logan Phantom
 nAx = 2; nPix = 256
@@ -22,35 +25,44 @@ arrM0 = slime.Enum2M0(arrPhant)*slime.genPhMap(nPix=nPix)
 arrM0 = torch.from_numpy(arrM0).to(device, torch.complex64)
 
 # Generate non-uniform trajectory
+mag.setGoldAng(1)
 _, lstArrG = mag.getG_Spiral(lNPix=nPix)
 lstArrK = [mag.cvtGrad2Traj(arrG, 10e-6, 2.5e-6)[0] for arrG in lstArrG]
 
-arr2PiKT = 2*pi*vstack(lstArrK).T.astype(float32)
+arrK = vstack(lstArrK).astype(float32)
+arr2PiKT = 2*pi*arrK.T
+arrDcf = mad.calDcf(nPix, arrK)
 
-modNufft2 = nufft2(2, (nPix,)*nAx, Size(), torch.from_numpy(arr2PiKT).to(device))
+modNufft2 = Nufft(2, (nPix,)*nAx, Size(), arr2PiKT)
 with torch.no_grad():
-    kspace_data = modNufft2(arrM0)
+    tenS0 = modNufft2(arrM0)
+if usePrecond:
+    modLoss = ToeKspL2Loss(arrK, sqrt(arrDcf), (nPix,)*nAx, tenS0)
+else:
+    modLoss = ToeKspL2Loss(arrK, sqrt(arrDcf).mean()*ones_like(arrDcf), (nPix,)*nAx, tenS0)
 
 # 3. Optimization (Inverse NUFFT)
-recon_image = torch.zeros((nPix,)*nAx, device=device, dtype=torch.complex64, requires_grad=True)
+tenM = torch.zeros((nPix,)*nAx, device=device, dtype=torch.complex64, requires_grad=True)
 
-optimizer = torch.optim.Adam([recon_image], lr=0.1)
+optimizer = torch.optim.Adam([tenM], lr=0.1)
 loss_fn = nn.MSELoss()
 
 print("Starting Optimization...")
 n = 1000
 t = time()
 for i in range(n):
-    if i%10==0: print(f"{i}/{n}")
     optimizer.zero_grad()
     
-    kspace_pred = modNufft2(recon_image)
-    loss = torch.mean(torch.abs(kspace_pred - kspace_data)**2)
+    if useToeplitz:
+        loss = modLoss(tenM)
+    else:
+        tenS = modNufft2(tenM)
+        loss = torch.mean(torch.abs(tenS - tenS0)**2)
     
     loss.backward()
     optimizer.step()
     
-    if i % 50 == 0:
+    if i % 100 == 0:
         print(f"Iteration {i}, Loss: {loss.item():.6f}")
 t = time() - t
 print(f"Elapsed Time: {t:.3f}s")
@@ -67,7 +79,7 @@ axis("equal")
 title("K-space Trajectory")
 
 subplot(133)
-imshow(recon_image.detach().abs().cpu(), cmap='gray')
+imshow(tenM.detach().abs().cpu(), cmap='gray')
 title("Reconstructed")
 
 show()
