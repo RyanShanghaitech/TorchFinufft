@@ -53,7 +53,7 @@ tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=torch.complex64, requires_grad
 # with torch.no_grad(): # test
 #     tenM[:] = tenM0
 
-optimizer = torch.optim.Adam([tenM], lr=1e-3)
+optimizer = torch.optim.Adam([tenM], lr=1e-1)
 loss_fn = nn.MSELoss()
 
 n = 1000
@@ -65,7 +65,7 @@ for i in range(n):
         loss = modLoss(tenM*tenCsm).sum()
     else:
         tenS = modNufft(tenM*tenCsm)
-        loss = torch.mean(torch.abs(tenS - tenS0)**2)
+        loss = torch.sum(torch.abs(tenS - tenS0)**2).sqrt()
     
     loss.backward()
     optimizer.step()
