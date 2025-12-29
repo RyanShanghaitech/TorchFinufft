@@ -1,16 +1,114 @@
+from numpy.typing import NDArray
 import torch
 from torch import Tensor, nn
 from torch.autograd.function import FunctionCtx
 import torch.nn.functional as F
-from typing import Literal
 from .utility import fftnc, ifftnc
 import finufft, cufinufft
 
 class ToePlan: pass
 
 class ToeKspL2Loss(nn.Module):
+    def __init__(self, tenK:Tensor|NDArray, tenDcf:Tensor|NDArray, tupSizeImg:tuple, tenS0:Tensor|NDArray, dev:torch.device|str="cuda"):
+        '''
+        Calculate ‖WFx-Wy‖,
+        
+        where F is NUFFT, x,y are vectors (typically are images and k-space groundtruth), W are density compensation function.  
+        
+        For optimization (by Toeplitz operator replacement), we need the sampling pattern in F, and corresponding W for initialization.
+            
+        :param tenK: k-space coordinate in `/pix`
+        :type tenK: Tensor|NDArray[nK,nAx]
+        :param tenDcf: density compensation function
+        :type tenDcf: Tensor|NDArray[nK]
+        :param tupSizeImg: image shape
+        :type tupSizeImg: tuple[nAx]
+        :param tenS0: k-space groundtruth
+        :type tenS0: Tensor|NDArray[nPass,nK]
+        :param dev: device 
+        :type dev: device|str
+        '''
+        super().__init__()
+        tenK = torch.as_tensor(tenK, device=dev)
+        W = torch.as_tensor(tenDcf, device=dev).sqrt()
+        y = torch.as_tensor(tenS0, device=dev)
+        
+        if W.shape[-1]!=y.shape[-1]:
+            raise AssertionError("tenW.shape[-1]!=tenS0.shape[-1]")
+        
+        if y.ndim==1:
+            W = W.unsqueeze(0)
+            y = y.unsqueeze(0)
+        elif y.ndim==2:
+            W = W.unsqueeze(0)
+        else:
+            raise AssertionError("tenS0.ndim")
+        nPass = y.shape[0]
+        if W.shape[0]==1:
+            W = W.repeat(nPass,1)
+        nAx = len(tupSizeImg)
+        tupSizeImg = tupSizeImg
+        tupSizeImg_2x = tuple(2*dim-dim%2 for dim in tupSizeImg)
+        
+        # `FWWF`
+        if y.is_cuda: fn=cufinufft
+        elif y.is_cpu: fn=finufft
+        else: raise NotImplementedError("device")
+        pBwd = fn.Plan(1, tupSizeImg_2x, nPass, dtype="complex64")
+        ten2PiKT = (2*torch.pi)*tenK.T[:nAx]
+        pBwd.setpts(*(ten2PiKT.contiguous().numpy() if fn==finufft else ten2PiKT.contiguous().cuda()))
+        _W = W.contiguous().numpy() if fn==finufft else W.contiguous().cuda()
+        FWWF_img:Tensor = pBwd.execute(_W.conj()*_W)
+        FWWF_img = torch.as_tensor(FWWF_img, device=dev)
+        FWWF_ksp:Tensor = fftnc(FWWF_img, 1+torch.arange(nAx))
+        self.register_buffer("FWWF_ksp", FWWF_ksp)
+        
+        # FᴴWᴴWy
+        _y = y.contiguous().numpy() if fn==finufft else y.contiguous().cuda()
+        FWWy:Tensor = pBwd.execute(_W.conj()*_W*_y)
+        FWWy = torch.as_tensor(FWWy, device=dev)
+        self.register_buffer("FWWy", FWWy)
+        
+        # `yᴴWᴴWy
+        Wy:Tensor = W*y # 2x
+        yWWy = torch.sum(Wy.conj()*Wy, 1)
+        self.register_buffer("yWWy", yWWy)
+        
+        # save context
+        self.tupSizeImg = tupSizeImg
+        self.nPass = nPass
+        self.pad = []
+        for dim, dim_2x in zip(reversed(tupSizeImg), reversed(tupSizeImg_2x)):
+            nPixPad = dim_2x - dim
+            nPixPadFront = nPixPad // 2
+            nPixPadBack = nPixPad - nPixPadFront
+            self.pad += [nPixPadFront, nPixPadBack]
+        self.pad = tuple(self.pad)
+    
+    def forward(self, tenImg:Tensor):
+        '''
+        :param self: n.a.
+        :param tenImg: Description
+        :type tenImg: Tensor[nPass,nPix,...]
+        '''
+        tupSizeImg:tuple = self.tupSizeImg
+        nPass:int = self.nPass
+        
+        if len(tupSizeImg)==tenImg.ndim:
+            tenImg = tenImg.unsqueeze(0)
+        if tupSizeImg!=tenImg.shape[1:] or nPass!=tenImg.shape[0]: # note: this loss function will not be a part of a model, and will only be used in training mode, in which batch number is a constant
+            raise AssertionError("tenImg.shape")
+        
+        x = F.pad(tenImg, self.pad)
+        plan = ToePlan()
+        plan.FWWF_ksp = self.FWWF_ksp
+        plan.FWWy = self.FWWy
+        plan.yWWy = self.yWWy
+        return ToeKspSQL2LossAutogradFunc.apply(plan, x).sqrt()
+
+
+class ToeKspSQL2LossAutogradFunc(torch.autograd.Function):
     '''
-    Calculate kspace l2-loss using Toeplitz kernel and DCF preconditioning
     Forward:
         ‖WFx-Wy‖²
         i.e.
@@ -20,124 +118,39 @@ class ToeKspL2Loss(nn.Module):
         ∂‖WFx-Wy‖²/∂x
         i.e.
         2FᴴWᴴWFx - 2FᴴWᴴWy
-    where F is NUFFT, x,y are vectors (typically are images and k-space groundtruth), W are density compensation function.
-    For optimization (by Toeplitz operator replacement), we need the sampling pattern in F, and corresponding W for initialization.
     '''
-    def __init__(self, tenK:Tensor, tenW:Tensor, tupSizeImg:tuple, tenS0:Tensor, dev:torch.device|str="cuda"):
-        '''
-        :param tenK: k-space coordinate in `/pix`
-        :type tenK: Tensor[nK,nAx]
-        :param tenW: squared root of the density compensation function
-        :type tenW: Tensor[nK]
-        :param tupSizeImg: image shape
-        :type tupSizeImg: tuple[nAx]
-        :param tenS0: k-space groundtruth
-        :type tenS0: Tensor[nPass,nK]
-        :param dev: device 
-        :type dev: Tensor[nPass,nK]
-        '''
-        super().__init__()
-        tenK = torch.as_tensor(tenK, device=dev)
-        tenW = torch.as_tensor(tenW, device=dev)
-        tenS0 = torch.as_tensor(tenS0, device=dev)
-        
-        if tenW.shape[-1]!=tenS0.shape[-1]:
-            raise AssertionError("tenW.shape[-1]!=tenS0.shape[-1]")
-        
-        if tenS0.ndim==1:
-            tenW = tenW.unsqueeze(0)
-            tenS0 = tenS0.unsqueeze(0)
-        elif tenS0.ndim==2:
-            pass
-        else:
-            raise AssertionError("tenS0.ndim")
-        self.nPass = tenS0.shape[0]
-        if tenW.shape[0]==1:
-            tenW = tenW.repeat(self.nPass,1)
-        self.nAx = len(tupSizeImg)
-        self.tupSizeImg = tupSizeImg
-        self.tupSizeImg_2x = tuple(2*dim-dim%2 for dim in tupSizeImg)
-        
-        self.pad = []
-        for dim, dim_2x in zip(reversed(tupSizeImg), reversed(self.tupSizeImg_2x)):
-            nPixPad = dim_2x - dim
-            nPixPadFront = nPixPad // 2
-            nPixPadBack = nPixPad - nPixPadFront
-            self.pad += [nPixPadFront, nPixPadBack]
-        self.pad = tuple(self.pad)
-        
-        # `tenKspApo`, apodization correspond to sampling convolution kernel
-        if tenS0.is_cuda: fn=cufinufft
-        elif tenS0.is_cpu: fn=finufft
-        else: raise NotImplementedError("device")
-        plan = fn.Plan(1, self.tupSizeImg_2x, self.nPass, dtype="complex64")
-        ten2PiKT = (2*torch.pi)*tenK.T[:self.nAx]
-        plan.setpts(*(ten2PiKT.contiguous().numpy() if fn==finufft else ten2PiKT.contiguous()))
-        _tenW = tenW.contiguous().numpy() if fn==finufft else tenW.contiguous()
-        tenImgKer:Tensor = torch.as_tensor(plan.execute(_tenW.conj()*_tenW), device=tenS0.device) # 2x
-        tenKspApo:Tensor = fftnc(tenImgKer, 1+torch.arange(self.nAx)) # 2x
-        self.register_buffer("tenKspApo", tenKspApo)
-        
-        # `tenFHWHWY`, FᴴWᴴWy
-        _tenS0 = tenS0.contiguous().numpy() if fn==finufft else tenS0.contiguous()
-        tenFHWHWY:Tensor = torch.as_tensor(plan.execute(_tenW.conj()*_tenW*_tenS0), device=tenS0.device) # 2x
-        self.register_buffer("tenFHWHWY", tenFHWHWY)
-        
-        # `tenYHWHWY`, yᴴWᴴWy
-        tenYHWHWY:Tensor = torch.linalg.vector_norm(tenW*tenS0) # 2x
-        tenYHWHWY *= tenYHWHWY
-        self.register_buffer("tenYHWHWY", tenYHWHWY)
-    
-    def forward(self, tenImg:Tensor):
-        '''
-        :param self: n.a.
-        :param tenImg: Description
-        :type tenImg: Tensor[nPass,nPix,...]
-        '''
-        if len(self.tupSizeImg)==tenImg.ndim:
-            tenImg = tenImg.unsqueeze(0)
-        if self.tupSizeImg!=tenImg.shape[1:] or self.nPass!=tenImg.shape[0]: # note: this loss function will not be a part of a model, and will only be used in training mode, in which batch number is a constant
-            raise AssertionError("tenImg.shape")
-        
-        # self.tenImgZeroPad[...] = 0 # no need to reinit as long as the imsize is unchanged
-        tenImg = F.pad(tenImg, self.pad)
-        plan = ToePlan()
-        plan.tenKspApo = self.tenKspApo
-        plan.tenFHWHWY = self.tenFHWHWY
-        plan.tenYHWHWY = self.tenYHWHWY
-        return ToeKspL2LossAutogradFunc.apply(plan, tenImg)
-
-
-class ToeKspL2LossAutogradFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx:FunctionCtx, plan:ToePlan, tenImgZeroPad:Tensor):
-        '''
-        :param ctx: n.a.
-        :type ctx: FunctionCtx
-        :param plan: includes
-            - tenKspApo: kspace apodization corresponds to FᴴWᴴWF convolution
-            - tenFHWHWY: FᴴWᴴWy
-            - tenYHWHWY: yᴴWᴴWy
-        :type plan: FunctionCtx
-        :param tenImgZeroPad: zero-padded img
-        :type tenImg: Tensor
-        '''
-        ctx.save_for_backward(tenImgZeroPad, plan.tenKspApo, plan.tenFHWHWY)
+        x = tenImgZeroPad
+        FWWF_ksp:Tensor = plan.FWWF_ksp
+        FWWy:Tensor = plan.FWWy
+        yWWy:Tensor = plan.yWWy
+        nAx = tenImgZeroPad.ndim-1
+        imaxes = (*range(1,nAx+1),)
+        
+        # xᴴFᴴWᴴWFx
+        xFWWFx = torch.sum(x.conj()*ifftnc(FWWF_ksp*fftnc(x, imaxes), imaxes), imaxes)
+        
+        # xᴴFᴴWᴴWy
+        xFWWy = torch.sum(x.conj()*FWWy, imaxes)
+        
+        # print(xFWWFx)
+        # print(- 2*xFWWy.real)
+        # print(yWWy)
+        # exit()
+        
+        # save context
+        ctx.save_for_backward(x, FWWF_ksp, FWWy)
         ctx.tupSizeImg = tuple(dim//2+dim%2 for dim in tenImgZeroPad.shape[1:])
-        ctx.nAx = tenImgZeroPad.ndim-1
-        return torch.real(torch.sum(tenImgZeroPad.conj()*ifftnc(fftnc(tenImgZeroPad, 1+torch.arange(ctx.nAx))*plan.tenKspApo, 1+torch.arange(ctx.nAx))) - 2*torch.sum(tenImgZeroPad.conj()*plan.tenFHWHWY) + plan.tenYHWHWY)
+        ctx.nAx = nAx
+        
+        return torch.real(xFWWFx - 2*xFWWy.real + yWWy)
     
     @staticmethod
-    def backward(ctx:FunctionCtx, tenLoss:Tensor):
-        '''
-        :param ctx: includes
-            - tenImgZeroPad: zero-padded img
-            - tenKspApo: kspace apodization corresponds to FᴴWᴴWF convolution
-            - tenFHWHWY: FᴴWᴴWy
-        :type ctx: FunctionCtx
-        :param tenLoss: scalar loss
-        :type tenLoss: Tensor
-        '''
-        tenImgZeroPad, tenKspApo, tenFHWHWY = ctx.saved_tensors
-        return None, tenLoss*2*(ifftnc(fftnc(tenImgZeroPad, 1+torch.arange(ctx.nAx))*tenKspApo, 1+torch.arange(ctx.nAx)) - tenFHWHWY)
+    def backward(ctx:FunctionCtx, gradLoss:Tensor):
+        x, FWWF_ksp, FWWy = ctx.saved_tensors
+        nAx:int = ctx.nAx
+        imaxes = (*range(1,nAx+1),)
+        
+        return None, gradLoss.reshape(gradLoss.shape+(1,)*nAx)*2*(ifftnc(fftnc(x, imaxes)*FWWF_ksp, imaxes) - FWWy)
         

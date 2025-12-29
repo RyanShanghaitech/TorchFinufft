@@ -1,18 +1,17 @@
 from numpy import prod
+from numpy.typing import NDArray
 import torch
 from torch import Tensor, Size
 import torch.nn as nn
 import cufinufft, finufft
 from finufft import Plan
-from typing import Literal
 
 class Nufft(nn.Module):
-    def __init__(self, nufft_type:int, n_modes:tuple, batch_shape:Size, pts:Tensor, dev:torch.device|str="cuda"):
+    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, pts:Tensor|NDArray, dev:torch.device|str="cuda"):
         super().__init__()
         pts = torch.as_tensor(pts, device=dev)
         
         nAx = len(n_modes)
-        n_trans = prod(batch_shape).astype(int).item()
         
         if pts.is_cuda: fn=cufinufft
         elif pts.is_cpu: fn=finufft
@@ -21,9 +20,16 @@ class Nufft(nn.Module):
         self.fwdPlan = fn.Plan(nufft_type, n_modes, n_trans, dtype="complex64")
         self.bwdPlan = fn.Plan(3-nufft_type, n_modes, n_trans, dtype="complex64")
         
-        _pts = pts.contiguous().numpy() if fn==finufft else pts.contiguous()
-        self.fwdPlan.setpts(*_pts[:nAx,:])
-        self.bwdPlan.setpts(*_pts[:nAx,:])
+        self.fn = fn
+        self.nAx = nAx
+        self.setpts(pts)
+        
+    def setpts(self, pts:Tensor|NDArray):
+        pts = torch.as_tensor(pts)
+        
+        _pts = pts.contiguous().numpy() if self.fn==finufft else pts.contiguous().cuda()
+        self.fwdPlan.setpts(*_pts[:self.nAx,:])
+        self.bwdPlan.setpts(*_pts[:self.nAx,:])
         
     def forward(self, x:Tensor):
         return NufftAutogradFunc.apply(self.fwdPlan, self.bwdPlan, x)
@@ -31,8 +37,6 @@ class Nufft(nn.Module):
 class NufftAutogradFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, fwdPlan:Plan, bwdPlan:Plan, data:Tensor):
-        data = data.contiguous()
-        
         nufft_type = fwdPlan.type
         n_modes = fwdPlan.n_modes
         n_trans = fwdPlan.n_trans

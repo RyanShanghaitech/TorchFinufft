@@ -4,7 +4,7 @@ version = "1.0.0"
 dependencies = ["numpy", "torch", "finufft", "cufinufft", "MRPhantom", "MRArbGrad", "MRArbDcf"]
 
 description = "NUFFT module for PyTorch."
-keywords = ["NUFFT", "PyTorch"]
+keywords = ["NUFFT", "Toeplitz", "non-Carteisan", "mri", "PyTorch"]
 authors = [{name = "Ryan", email = "ryan_shanghaitech@proton.me"}]
 
 license = "MIT"
