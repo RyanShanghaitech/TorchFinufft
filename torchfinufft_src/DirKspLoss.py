@@ -8,7 +8,7 @@ from cufinufft import Plan as cudaPlan
 
 class DirPlan: pass
 
-def nufft(x:Tensor, plan:cpuPlan|cudaPlan, dev:torch.device):
+def _nufft(x:Tensor, plan:cpuPlan|cudaPlan, dev:torch.device):
     if isinstance(plan, cpuPlan):
         _x = x.contiguous().numpy()
     elif isinstance(plan, cudaPlan):
@@ -39,6 +39,7 @@ class DirKspL2Loss(nn.Module):
         :type dev: device|str
         '''
         super().__init__()
+        print("[WARN] This is a slow implementation only for reference. For Toeplitz boosted implementation please use `ToeKspL2Loss`.")
         tenK  = torch.as_tensor(tenK, device=dev)
         W  = torch.as_tensor(tenDcf, device=dev).sqrt()
         y = torch.as_tensor(tenS0, device=dev)
@@ -124,14 +125,14 @@ class DirKspSQL2LossAutogradFunc(torch.autograd.Function):
         pBwd.setpts(*_ten2PiKT)
 
         # xᴴFᴴWᴴWFx
-        Fx = nufft(x, pFwd, dev)
+        Fx = _nufft(x, pFwd, dev)
         WWFx = W.conj()*W*Fx
-        FWWFx = nufft(WWFx, pBwd, dev)
+        FWWFx = _nufft(WWFx, pBwd, dev)
         xFWWFx = torch.sum(x.conj()*FWWFx)
         
         # xᴴFᴴWᴴWy
         WWy = W.conj()*W*y
-        FWWy = nufft(WWy, pBwd, dev)
+        FWWy = _nufft(WWy, pBwd, dev)
         xFWWy = torch.sum(x.conj()*FWWy)
         
         # yᴴWᴴWy
@@ -173,10 +174,10 @@ class DirKspSQL2LossAutogradFunc(torch.autograd.Function):
         
         # FᴴWᴴWFx
         WWFx = W.conj()*W*Fx
-        FWWFx = nufft(WWFx, pBwd, dev)
+        FWWFx = _nufft(WWFx, pBwd, dev)
         
         # FᴴWᴴWy
         WWy = W.conj()*W*y
-        FWWy = nufft(WWy, pBwd, dev)
+        FWWy = _nufft(WWy, pBwd, dev)
 
         return None, gradLoss*2*(FWWFx - FWWy)

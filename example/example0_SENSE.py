@@ -1,5 +1,4 @@
 from numpy import *
-from numpy.typing import *
 from matplotlib.pyplot import *
 
 import torch

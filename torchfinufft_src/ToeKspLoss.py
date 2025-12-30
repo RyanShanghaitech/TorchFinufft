@@ -24,7 +24,7 @@ class ToeKspL2Loss(nn.Module):
         :param tupSizeImg: image shape
         :type tupSizeImg: tuple[nAx]
         :param tenS0: k-space groundtruth
-        :type tenS0: Tensor|NDArray[nPass,nK]
+        :type tenS0: Tensor|NDArray[nTran,nK]
         :param dev: device 
         :type dev: device|str
         '''
@@ -43,9 +43,9 @@ class ToeKspL2Loss(nn.Module):
             W = W.unsqueeze(0)
         else:
             raise AssertionError("tenS0.ndim")
-        nPass = y.shape[0]
+        nTran = y.shape[0]
         if W.shape[0]==1:
-            W = W.repeat(nPass,1)
+            W = W.repeat(nTran,1)
         nAx = len(tupSizeImg)
         tupSizeImg = tupSizeImg
         tupSizeImg_2x = tuple(2*dim-dim%2 for dim in tupSizeImg)
@@ -54,7 +54,7 @@ class ToeKspL2Loss(nn.Module):
         if y.is_cuda: fn=cufinufft
         elif y.is_cpu: fn=finufft
         else: raise NotImplementedError("device")
-        pBwd = fn.Plan(1, tupSizeImg_2x, nPass, dtype="complex64")
+        pBwd = fn.Plan(1, tupSizeImg_2x, nTran, dtype="complex64")
         ten2PiKT = (2*torch.pi)*tenK.T[:nAx]
         pBwd.setpts(*(ten2PiKT.contiguous().numpy() if fn==finufft else ten2PiKT.contiguous().cuda()))
         _W = W.contiguous().numpy() if fn==finufft else W.contiguous().cuda()
@@ -76,7 +76,7 @@ class ToeKspL2Loss(nn.Module):
         
         # save context
         self.tupSizeImg = tupSizeImg
-        self.nPass = nPass
+        self.nTran = nTran
         self.pad = []
         for dim, dim_2x in zip(reversed(tupSizeImg), reversed(tupSizeImg_2x)):
             nPixPad = dim_2x - dim
@@ -89,14 +89,14 @@ class ToeKspL2Loss(nn.Module):
         '''
         :param self: n.a.
         :param tenImg: Description
-        :type tenImg: Tensor[nPass,nPix,...]
+        :type tenImg: Tensor[nTran,nPix,...]
         '''
         tupSizeImg:tuple = self.tupSizeImg
-        nPass:int = self.nPass
+        nTran:int = self.nTran
         
         if len(tupSizeImg)==tenImg.ndim:
             tenImg = tenImg.unsqueeze(0)
-        if tupSizeImg!=tenImg.shape[1:] or nPass!=tenImg.shape[0]: # note: this loss function will not be a part of a model, and will only be used in training mode, in which batch number is a constant
+        if tupSizeImg!=tenImg.shape[1:] or nTran!=tenImg.shape[0]: # note: this loss function will not be a part of a model, and will only be used in training mode, in which batch number is a constant
             raise AssertionError("tenImg.shape")
         
         x = F.pad(tenImg, self.pad)
