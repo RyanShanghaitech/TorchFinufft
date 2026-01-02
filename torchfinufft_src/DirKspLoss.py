@@ -2,10 +2,15 @@ from numpy.typing import NDArray
 import torch
 from torch import Tensor, nn
 from torch.autograd.function import FunctionCtx
-import finufft, cufinufft
+import finufft
 from finufft import Plan as cpuPlan
-from cufinufft import Plan as cudaPlan
-
+try:
+    import cufinufft
+    from cufinufft import Plan as cudaPlan
+    hasCuda = 1
+except ImportError:
+    hasCuda = 0
+    
 class DirPlan: pass
 
 def _nufft(x:Tensor, plan:cpuPlan|cudaPlan, dev:torch.device):

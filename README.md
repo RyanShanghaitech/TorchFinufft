@@ -18,6 +18,8 @@ To install with pip:
 pip install torchfinufft-ryan
 ```
 
+Optionally, to enable CUDA computation, `cufinufft` has to be installed.
+
 ## Usage
 Please refer to the `exmaple` folder - there are minimal example(s) for tutorial.
 
