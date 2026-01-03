@@ -27,7 +27,7 @@ tenM0 = torch.from_numpy(arrM0).to(dev, torch.complex64)
 
 # Generate non-Cartesian trajectories
 mag.setGoldAng(1)
-_, lstArrG = mag.getG_Spiral(lNPix=nPix)
+_, lstArrG = mag.getG_Spiral(nPix=nPix)
 lstArrK = [mag.cvtGrad2Traj(arrG, 10e-6, 2.5e-6)[0] for arrG in lstArrG]
 lstArrK = lstArrK[:len(lstArrK)//kTurbo] # undersampling
 
@@ -40,7 +40,7 @@ with torch.no_grad():
     tenS0 = modNufft(tenM0*tenCsm)
     
 if usePrecond:
-    arrDcf = mad.calDcf(nPix, arrK[:,:nAx]).astype(complex64)
+    arrDcf = hstack(mad.sovDcf(nPix, lstArrK)).astype(complex64)
 else:
     arrDcf = ones([arrK.shape[0]]).astype(complex64)
     
