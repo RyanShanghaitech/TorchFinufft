@@ -13,52 +13,62 @@ import mrarbdcf as mad
 # parameters
 useToeplitz = 1
 usePrecond = 1
-# nAx = 2; nPix = 256; kTurbo = 16; nCh = 1; lamb = 0
-nAx = 2; nPix = 256; kTurbo = 16; nCh = 8; lamb = 1e-3
+nAx = 2; nPix = 256; kTurbo = 2; nCh = 2; lamb = 1e-3
 sDev = "cuda" if torch.cuda.is_available() else "cpu"
 dev = torch.device(sDev)
 
+if sDev=="cuda":
+    complex = torch.complex64
+    float = torch.float32
+    scomplex = "complex64"
+elif sDev=="cpu":
+    complex = torch.complex128
+    float = torch.float64
+    scomplex = "complex128"
+else:
+    raise NotImplementedError("dev")
+
 # generate slime phantom
-random.seed(42)
+random.seed(0)
 arrPhant = genPhant(nPix=nPix)
 arrM0 = Enum2M0(arrPhant)*genPhMap(nPix=nPix)
 arrCsm = genCsm(nAx, nPix, nCh)
-tenCsm = torch.as_tensor(arrCsm, dtype=torch.complex64, device=dev)
-tenM0 = torch.from_numpy(arrM0).to(dev, torch.complex64)
+tenCsm = torch.as_tensor(arrCsm, dtype=complex, device=dev)
+tenM0 = torch.from_numpy(arrM0).to(dev, complex)
 
 # Generate non-Cartesian trajectories
 mag.setGoldAng(0)
 mag.setShuf(1)
-lstArrG = mag.getG_VarDenSpiral(nPix=nPix, kRhoPhi0=0.5/(256*pi), kRhoPhi1=0.5/(4*pi))[1]
+lstArrG = mag.getG_Spiral(nPix=nPix, sLim=100*42.5756e6*0.256/256)[1]
 nPE = len(lstArrG)
 lstArrK = [mag.cvtGrad2Traj(arrG, 10e-6, 2.5e-6)[0] for arrG in lstArrG]
 lstArrK = lstArrK[:nPE//kTurbo] # undersampling
+tAcq = lstArrK[0].shape[0]*1e-5
+print(f"{nPE} x {tAcq*1e3:.2f} ms = {nPE*tAcq*1e3:.2f} ms")
 
-arrK = vstack(lstArrK).astype(float32)
+arrK = vstack(lstArrK)
 arr2PiKT = 2*pi*arrK.T
 
 # construct torch modules
-modNufft = Nufft(2, (nPix,)*nAx, nCh, arr2PiKT, dev)
+modNufft = Nufft(2, (nPix,)*nAx, nCh, arr2PiKT, dev, complex)
 with torch.no_grad():
     tenS0:Tensor = modNufft(tenM0*tenCsm)
     
 if usePrecond:
-    arrDcf = hstack(mad.sovDcf(nPix, lstArrK)).astype(complex64)
+    arrDcf = hstack(mad.sovDcf(nPix, lstArrK))
 else:
-    arrDcf = ones([arrK.shape[0]]).astype(complex64)
+    arrDcf = ones([arrK.shape[0]])
     
 if nAx==2: arrDcf *= (pi/4) / arrDcf.sum()
 elif nAx==3: arrDcf *= (pi/6) / arrDcf.sum()
-tenDcf = torch.as_tensor(arrDcf)
+tenDcf = torch.as_tensor(arrDcf, device=dev, dtype=complex)
 
-modLoss = ToeKspMSELoss(arrK, arrDcf, (nPix,)*nAx, tenS0, dev)
+modLoss = ToeKspMSELoss(arrK, tenDcf, (nPix,)*nAx, tenS0, dev, complex)
 
 # Optimization
-tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=torch.complex64, requires_grad=True)
+tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=complex, requires_grad=True)
 
-# optimizer = torch.optim.SGD([tenM], lr=1e3); nIter = 1000
-# optimizer = torch.optim.LBFGS([tenM], lr=1e-1); nIter = 100
-optimizer = torch.optim.Adam([tenM], lr=1e-1); nIter = 1000 # superior
+optimizer = torch.optim.SGD([tenM], lr=1e3); nIter = 1000
 
 loss0 = -1
 lstLoss = []
@@ -110,7 +120,7 @@ with torch.no_grad():
     tenM = tenMBest
 
 # Visualization
-figure(figsize=(12, 6))
+figure(figsize=(12,6), dpi=150)
 
 subplot(231)
 imshow(abs(arrM0), cmap='gray')

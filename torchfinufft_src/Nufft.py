@@ -7,9 +7,19 @@ import cufinufft, finufft
 from finufft import Plan
 
 class Nufft(nn.Module):
-    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, pts:Tensor|NDArray, dev:torch.device|str="cuda"):
+    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, pts:Tensor|NDArray, dev:torch.device|str="cuda", dtype:torch.dtype=torch.float32):
         super().__init__()
-        pts = torch.as_tensor(pts, device=dev)
+        if dtype in (torch.complex64, torch.float32):
+            complex = torch.complex64
+            float = torch.float32
+            scomplex = "complex64"
+        elif dtype in (torch.complex128, torch.float64):
+            complex = torch.complex128
+            float = torch.float64
+            scomplex = "complex128"
+        else:
+            raise NotImplementedError("dtype")
+        pts = torch.as_tensor(pts, device=dev, dtype=float)
         
         nAx = len(n_modes)
         
@@ -17,8 +27,8 @@ class Nufft(nn.Module):
         elif pts.is_cpu: fn=finufft
         else: raise NotImplementedError("device")
         
-        self.fwdPlan = fn.Plan(nufft_type, n_modes, n_trans, dtype="complex64")
-        self.bwdPlan = fn.Plan(3-nufft_type, n_modes, n_trans, dtype="complex64")
+        self.fwdPlan = fn.Plan(nufft_type, n_modes, n_trans, dtype=scomplex)
+        self.bwdPlan = fn.Plan(3-nufft_type, n_modes, n_trans, dtype=scomplex)
         
         self.fn = fn
         self.nAx = nAx

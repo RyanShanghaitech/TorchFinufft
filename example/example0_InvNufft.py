@@ -15,29 +15,40 @@ nAx = 2; nPix = 256
 sDev = "cuda" if torch.cuda.is_available() else "cpu"
 dev = torch.device(sDev)
 
+if sDev=="cuda":
+    complex = torch.complex64
+    float = torch.float32
+    scomplex = "complex64"
+elif sDev=="cpu":
+    complex = torch.complex128
+    float = torch.float64
+    scomplex = "complex128"
+else:
+    raise NotImplementedError("dev")
+
 # generate slime phantom
-random.seed(42)
+random.seed(0)
 arrPhant = genPhant(nPix=nPix)
 arrM0 = Enum2M0(arrPhant)*genPhMap(nPix=nPix)
-tenM0 = torch.from_numpy(arrM0).to(dev, torch.complex64)
+tenM0 = torch.from_numpy(arrM0).to(dev, complex)
 
 # Generate non-Cartesian trajectories
 lstArrG = mag.getG_Spiral(nPix=nPix,)[1]
 nPE = len(lstArrG)
 lstArrK = [mag.cvtGrad2Traj(arrG, 10e-6, 2.5e-6)[0] for arrG in lstArrG]
 
-arrK = vstack(lstArrK).astype(float32)
+arrK = vstack(lstArrK)
 arr2PiKT = 2*pi*arrK.T
 
 # construct torch modules
-modNufft = Nufft(2, (nPix,)*nAx, 1, arr2PiKT, dev)
+modNufft = Nufft(2, (nPix,)*nAx, 1, arr2PiKT, dev, complex)
 with torch.no_grad():
     tenS0:Tensor = modNufft(tenM0)
 
-modLoss = ToeKspMSELoss(arrK, None, (nPix,)*nAx, tenS0, dev)
+modLoss = ToeKspMSELoss(arrK, None, (nPix,)*nAx, tenS0, dev, complex)
 
 # Optimization
-tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=torch.complex64, requires_grad=True)
+tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=complex, requires_grad=True)
 
 optimizer = torch.optim.SGD([tenM], lr=1e3); nIter = 1000
 
@@ -69,7 +80,7 @@ t = time() - t
 print(f"Elapsed Time: {t:.3f}s")
 
 # Visualization
-figure(figsize=(12, 6))
+figure(figsize=(12,6), dpi=150)
 
 subplot(231)
 imshow(abs(arrM0), cmap='gray')

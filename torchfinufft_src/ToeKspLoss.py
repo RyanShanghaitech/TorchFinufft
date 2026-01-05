@@ -24,7 +24,7 @@ def _nufft(p, x:Tensor) -> Tensor:
     return torch.as_tensor(y, device=x.device)
 
 class ToeKspMSELoss(nn.Module):
-    def __init__(self, tenK:Tensor|NDArray, tenDcf:Tensor|NDArray|None, tupSizeImg:tuple, tenS0:Tensor|NDArray, dev:torch.device|str="cuda"):
+    def __init__(self, tenK:Tensor|NDArray, tenDcf:Tensor|NDArray|None, tupSizeImg:tuple, tenS0:Tensor|NDArray, dev:torch.device|str="cuda", dtype:torch.dtype=torch.float32):
         """
         Calculate mean of ‖WFx-Wy‖²,
         
@@ -44,8 +44,18 @@ class ToeKspMSELoss(nn.Module):
         :type dev: device|str
         """
         super().__init__()
+        if dtype in (torch.complex64, torch.float32):
+            complex = torch.complex64
+            float = torch.float32
+            scomplex = "complex64"
+        elif dtype in (torch.complex128, torch.float64):
+            complex = torch.complex128
+            float = torch.float64
+            scomplex = "complex128"
+        else:
+            raise NotImplementedError("dtype")
         if tenDcf is None:
-            tenDcf = torch.ones((tenK.shape[0],), device=dev, dtype=torch.complex64)
+            tenDcf = torch.ones((tenK.shape[0],), device=dev, dtype=complex)
         tenK = torch.as_tensor(tenK, device=dev)
         W = torch.as_tensor(tenDcf, device=dev).sqrt()
         y = torch.as_tensor(tenS0, device=dev)
@@ -71,7 +81,7 @@ class ToeKspMSELoss(nn.Module):
         if y.is_cuda: fn=cufinufft
         elif y.is_cpu: fn=finufft
         else: raise NotImplementedError("device")
-        pBwd = fn.Plan(1, tupSizeImg_2x, nTran, dtype="complex64")
+        pBwd = fn.Plan(1, tupSizeImg_2x, nTran, dtype=scomplex)
         ten2PiKT = (2*torch.pi)*tenK.T[:nAx]
         pBwd.setpts(*(ten2PiKT.contiguous().numpy() if fn==finufft else ten2PiKT.contiguous().cuda()))
         FWWF_img = _nufft(pBwd, W.conj()*W)
