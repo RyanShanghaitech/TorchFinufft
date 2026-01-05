@@ -1,11 +1,11 @@
 # NUFFT module for PyTorch
 
 ## Introduction
-There is no NUFFT function in PyTorch, neither is Toeplitz l2-loss module, which is important for non-Cartesian MRI reconstruction works. To fill this gap, this package provides:
-1. A high performance NUFFT `torch.nn` module wrapping `cufinufft` [3] and `finufft` [1,2] - they are the fastest NUFFT backend I have ever seen.
-2. Another elegant l2-loss module for non-Cartesian reconstruction with **DCF preconditioning** boosted by **Toeplitz** operator. Basically, this is done by replacing the two-pass NUFFTs with a Cartesian fast Fourier convolution. This method is also fast but slightly slower than cufinufft in practice. Use as you need.
+There is no built-in NUFFT function in PyTorch, neither is Toeplitz MSE loss module, which is important for non-Cartesian MRI reconstruction works. To fill this gap, this package provides:
+1. A high performance NUFFT `torch.nn` module wrapping `cufinufft` [3] and `finufft` [1,2] - they are the fastest NUFFT backends to the best of my knowledge.
+2. Another elegant MSE loss (square of l2 loss) module for non-Cartesian reconstruction with **DCF preconditioning** boosted by **Toeplitz** operator. Basically, this is done by replacing the two-pass NUFFTs with a Cartesian fast Fourier convolution. This method is also fast but slightly slower than cufinufft in practice. Use as you need.
 
-Both CPU and GPU are supported. Benchmark indicates a 2ms (NUFFT module) or a 3ms (Toeplitz l2-loss module) time cost per iteration in a 256×256 inverse NUFFT problem using a RTX3090 GPU.
+Both CPU and GPU are supported. Benchmark indicates a 2ms (NUFFT module) or a 3ms (Toeplitz MSE loss module) time cost per iteration in a 256×256 inverse NUFFT problem using a RTX3090 GPU.
 
 ## Install
 For offline installing:

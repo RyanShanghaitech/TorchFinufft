@@ -24,8 +24,12 @@ def _nufft(x:Tensor, plan:cpuPlan|cudaPlan, dev:torch.device):
     return torch.as_tensor(y, device=dev)
 
 class DirKspL2Loss(nn.Module):
+    """
+    .. version-deprecated:: 1.1.0
+        This is a slow implementation only for test. For Toeplitz boosted implementation please use `ToeKspL2Loss`.
+    """
     def __init__(self, tenK:Tensor|NDArray, tenDcf:Tensor|NDArray, tupSizeImg:tuple, tenS0:Tensor|NDArray, dev:torch.device|str = "cuda"):
-        '''
+        """
         Compute ‖WFx-Wy‖,
         
         where F is NUFFT, x,y are vectors (typically are images and k-space groundtruth), W are density compensation function.
@@ -42,9 +46,8 @@ class DirKspL2Loss(nn.Module):
         :type tenS0: Tensor|NDArray[nPass,nK]
         :param dev: device 
         :type dev: device|str
-        '''
+        """
         super().__init__()
-        print("[WARN] This is a slow implementation only for reference. For Toeplitz boosted implementation please use `ToeKspL2Loss`.")
         tenK  = torch.as_tensor(tenK, device=dev)
         W  = torch.as_tensor(tenDcf, device=dev).sqrt()
         y = torch.as_tensor(tenS0, device=dev)
@@ -71,11 +74,11 @@ class DirKspL2Loss(nn.Module):
         self.register_buffer("y", y)
 
     def forward(self, tenImg:Tensor):
-        '''
+        """
         :param self: n.a.
         :param tenImg: Description
         :type tenImg: Tensor[nPass,nPix,...]
-        '''
+        """
         if len(self.tupSizeImg) == tenImg.ndim:
             tenImg = tenImg.unsqueeze(0)
         if self.tupSizeImg != tenImg.shape[1:] or self.nPass != tenImg.shape[0]:
@@ -91,7 +94,10 @@ class DirKspL2Loss(nn.Module):
         return DirKspSQL2LossAutogradFunc.apply(plan, tenImg).sqrt()
 
 class DirKspSQL2LossAutogradFunc(torch.autograd.Function):
-    '''
+    """
+    .. version-deprecated:: 1.1.0
+        This is a slow implementation only for test. For Toeplitz boosted implementation please use `ToeKspL2Loss`.
+            
     Forward:
         ‖WFx-Wy‖²
         i.e.
@@ -101,7 +107,7 @@ class DirKspSQL2LossAutogradFunc(torch.autograd.Function):
         ∂‖WFx-Wy‖²/∂x
         i.e.
         2FᴴWᴴWFx - 2FᴴWᴴWy
-    '''
+    """
     @staticmethod
     def forward(ctx:FunctionCtx, plan:DirPlan, tenImg:Tensor):
         x:Tensor = tenImg

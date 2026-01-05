@@ -1,0 +1,2 @@
+1.1.0
+We replace l2 loss with MSE loss, since `sqrt()` in l2 loss is numerically unstable, which might lead to `NaN` loss during backward in the previous version. We also add more examples - InvNufft is for kick-start, TV_SENSE is for advanced non-Cartesian reconstruction test.
