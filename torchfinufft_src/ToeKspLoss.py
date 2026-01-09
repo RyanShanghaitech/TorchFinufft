@@ -56,9 +56,9 @@ class ToeKspMSELoss(nn.Module):
             raise NotImplementedError("dtype")
         if tenDcf is None:
             tenDcf = torch.ones((tenK.shape[0],), device=dev, dtype=complex)
-        tenK = torch.as_tensor(tenK, device=dev)
-        W = torch.as_tensor(tenDcf, device=dev).sqrt()
-        y = torch.as_tensor(tenS0, device=dev)
+        tenK = torch.as_tensor(tenK, device=dev, dtype=float)
+        W = torch.as_tensor(tenDcf, device=dev, dtype=complex).sqrt()
+        y = torch.as_tensor(tenS0, device=dev, dtype=complex)
         
         if W.shape[-1]!=y.shape[-1]:
             raise AssertionError("tenW.shape[-1]!=tenS0.shape[-1]")

@@ -1,3 +1,6 @@
+1.2.1
+Fix bug about dtype conversation in `ToeKspMSELoss`.
+
 1.2.0
 Support altering dtype (float32/float64) for `Nufft` and `ToeMSELoss` module.
 
