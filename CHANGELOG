@@ -1,3 +1,6 @@
+2.1.0 (March 30, 2026)
+Nufft init function now support string dtype.
+
 2.0.0 (March 29, 2026)
 We remove `pts` in Nufft construction, user now must use `setpts()` to set the trajectory.
 

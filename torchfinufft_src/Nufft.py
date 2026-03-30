@@ -10,12 +10,14 @@ else: hasCufn = 1
 from finufft import Plan
 
 class Nufft(nn.Module):
-    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, device:torch.device|str="cuda", dtype:torch.dtype=torch.float32):
+    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, device:torch.device|str="cuda", dtype:str|torch.dtype="complex64"):
         super().__init__()
         if dtype in (torch.complex64, torch.float32):
             scomplex = "complex64"
         elif dtype in (torch.complex128, torch.float64):
             scomplex = "complex128"
+        elif isinstance(dtype, str):
+            scomplex = dtype
         else:
             raise NotImplementedError("dtype")
         
