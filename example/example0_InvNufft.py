@@ -41,7 +41,8 @@ arrK = vstack(lstArrK)
 arr2PiKT = 2*pi*arrK.T
 
 # construct torch modules
-modNufft = Nufft(2, (nPix,)*nAx, 1, arr2PiKT, dev, complex)
+modNufft = Nufft(2, (nPix,)*nAx, 1, dev, complex)
+modNufft.setpts(arr2PiKT)
 with torch.no_grad():
     tenS0:Tensor = modNufft(tenM0)
 

@@ -1,3 +1,6 @@
+2.0.0 (March 29, 2026)
+We remove `pts` in Nufft construction, user now must use `setpts()` to set the trajectory.
+
 1.2.1
 Fix bug about dtype conversation in `ToeKspMSELoss`.
 

@@ -3,28 +3,27 @@ from numpy.typing import NDArray
 import torch
 from torch import Tensor, Size
 import torch.nn as nn
-import cufinufft, finufft
+import finufft
+try: import cufinufft
+except: hasCufn = 0
+else: hasCufn = 1
 from finufft import Plan
 
 class Nufft(nn.Module):
-    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, pts:Tensor|NDArray, dev:torch.device|str="cuda", dtype:torch.dtype=torch.float32):
+    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, device:torch.device|str="cuda", dtype:torch.dtype=torch.float32):
         super().__init__()
         if dtype in (torch.complex64, torch.float32):
-            complex = torch.complex64
-            float = torch.float32
             scomplex = "complex64"
         elif dtype in (torch.complex128, torch.float64):
-            complex = torch.complex128
-            float = torch.float64
             scomplex = "complex128"
         else:
             raise NotImplementedError("dtype")
-        pts = torch.as_tensor(pts, device=dev, dtype=float)
         
         nAx = len(n_modes)
+        self.device = torch.device(device)
         
-        if pts.is_cuda: fn=cufinufft
-        elif pts.is_cpu: fn=finufft
+        if self.device.type=="cuda": fn=cufinufft
+        elif self.device.type=="cpu": fn=finufft
         else: raise NotImplementedError("device")
         
         self.fwdPlan = fn.Plan(nufft_type, n_modes, n_trans, dtype=scomplex)
@@ -32,12 +31,25 @@ class Nufft(nn.Module):
         
         self.fn = fn
         self.nAx = nAx
-        self.setpts(pts)
         
     def setpts(self, pts:Tensor|NDArray):
+        """
+        NOTE: this will also change the points of the backward plan, so after `setpts()` and `forward()`, you must call `backward()` before another `setpts()`, or `backward()` will use the wrong points.
+        
+        Set points for internal nufft plans.
+
+        Args:
+            pts (Tensor | NDArray): see `finufft.Plan.setpts()`
+        """
         pts = torch.as_tensor(pts)
         
-        _pts = pts.contiguous().numpy() if self.fn==finufft else pts.contiguous().cuda()
+        if self.device.type=="cpu":
+            _pts = pts.contiguous().numpy()
+        elif self.device.type=="cuda":
+            _pts = pts.contiguous().to(self.device)
+        else:
+            raise NotImplementedError("device")
+        
         self.fwdPlan.setpts(*_pts[:self.nAx,:])
         self.bwdPlan.setpts(*_pts[:self.nAx,:])
         
@@ -57,12 +69,12 @@ class NufftAutogradFunc(torch.autograd.Function):
         
         ctx.bwdPlan = bwdPlan
         
-        _data = data.contiguous().numpy() if isinstance(bwdPlan, finufft.Plan) else data.contiguous()
+        _data = data.contiguous().numpy() if isinstance(fwdPlan, finufft.Plan) else data.contiguous()
         if nufft_type == 1:
             out = fwdPlan.execute(_data.reshape(n_trans,-1)).reshape(*batch_shape,*n_modes)
         else:
             out = fwdPlan.execute(_data.reshape(n_trans,*n_modes)).reshape(*batch_shape,-1)
-        out = torch.as_tensor(out)
+        out = torch.as_tensor(out, device=data.device)
         return out
 
     @staticmethod

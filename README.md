@@ -16,7 +16,7 @@ To install with pip:
 ```bash
 $ pip install torchfinufft-ryan
 ```
-Optionally, to enable CUDA computation, `cufinufft` has to be installed. To solve for the density compensation function, I recommend my `mrarbdcf` package.
+Optionally, to enable CUDA computation, `cufinufft>=2.5.0` has to be installed. To solve for the density compensation function, I recommend my `mrarbdcf` package.
 
 ## Usage
 Please refer to the `exmaple` folder - there are minimal example(s) for tutorial. Please run:

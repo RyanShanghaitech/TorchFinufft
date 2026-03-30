@@ -50,12 +50,13 @@ arrK = vstack(lstArrK)
 arr2PiKT = 2*pi*arrK.T
 
 # construct torch modules
-modNufft = Nufft(2, (nPix,)*nAx, nCh, arr2PiKT, dev, complex)
+modNufft = Nufft(2, (nPix,)*nAx, nCh, dev, complex)
+modNufft.setpts(arr2PiKT)
 with torch.no_grad():
     tenS0:Tensor = modNufft(tenM0*tenCsm)
     
 if usePrecond:
-    arrDcf = hstack(mad.sovDcf(nPix, lstArrK))
+    arrDcf = hstack(mad.solve(nPix, lstArrK))
 else:
     arrDcf = ones([arrK.shape[0]])
     
