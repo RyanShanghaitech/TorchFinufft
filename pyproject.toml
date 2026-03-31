@@ -1,6 +1,6 @@
 [project]
 name = "torchfinufft-ryan"
-version = "2.0.0"
+version = "2.2.0"
 dependencies = ["numpy", "torch", "finufft"]
 
 description = "NUFFT module for PyTorch."

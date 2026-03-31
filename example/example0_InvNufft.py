@@ -4,9 +4,9 @@ from matplotlib.pyplot import *
 import torch
 from torch import Tensor
 
-from torchfinufft import *
+import torchfinufft as tfn
 from time import time
-from mrphantom import *
+import mrphantom as pht
 import mrarbgrad as mag
 
 # parameters
@@ -28,8 +28,8 @@ else:
 
 # generate slime phantom
 random.seed(0)
-arrPhant = genPhant(nPix=nPix)
-arrM0 = Enum2M0(arrPhant)*genPhMap(nPix=nPix)
+arrPhant = pht.genPhant(nPix=nPix)
+arrM0 = pht.Enum2M0(arrPhant)*pht.genPhMap(nPix=nPix)
 tenM0 = torch.from_numpy(arrM0).to(dev, complex)
 
 # Generate non-Cartesian trajectories
@@ -41,12 +41,12 @@ arrK = vstack(lstArrK)
 arr2PiKT = 2*pi*arrK.T
 
 # construct torch modules
-modNufft = Nufft(2, (nPix,)*nAx, 1, dev, complex)
+modNufft = tfn.Nufft(2, (nPix,)*nAx, 1, device=dev, dtype=complex)
 modNufft.setpts(arr2PiKT)
 with torch.no_grad():
     tenS0:Tensor = modNufft(tenM0)
 
-modLoss = ToeKspMSELoss(arrK, None, (nPix,)*nAx, tenS0, dev, complex)
+modLoss = tfn.ToeKspMSELoss(arrK, None, (nPix,)*nAx, tenS0, dev, complex)
 
 # Optimization
 tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=complex, requires_grad=True)

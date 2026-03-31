@@ -10,7 +10,19 @@ else: hasCufn = 1
 from finufft import Plan
 
 class Nufft(nn.Module):
-    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int, device:torch.device|str="cuda", dtype:str|torch.dtype="complex64"):
+    def __init__(self, nufft_type:int, n_modes:tuple, n_trans:int=1, eps:float=1e-6, isign:int|None=None, device:torch.device|str="cuda", dtype:str|torch.dtype="complex64"):
+        """
+        init function of NUFFT PyTorch module. Here we will decide the basic parameter of the NUFFT.
+
+        Args:
+            nufft_type (int): 1: Non-Uniform -> Uniform (e.g. MRI reconstruction); 2: Uniform -> Non-Uniform (e.g. MRI simulation).
+            n_modes (tuple): Matrix size.
+            n_trans (int): Batch size. Defaults to 1.
+            eps (float): FINUFFT precision.
+            isign (int): Sign of Fourier index, -1: Fourier Transform; 1: Inverse Fourier Transform; None: Auto-decide by `nufft-type`. Defaults to None.
+            device (torch.device | str, optional): PyTorch device. Defaults to "cuda".
+            dtype (str | torch.dtype, optional): FINUFFT data dtype. "complex64" or "complex128". Defaults to "complex64".
+        """
         super().__init__()
         if dtype in (torch.complex64, torch.float32):
             scomplex = "complex64"
@@ -28,8 +40,8 @@ class Nufft(nn.Module):
         elif self.device.type=="cpu": fn=finufft
         else: raise NotImplementedError("device")
         
-        self.fwdPlan = fn.Plan(nufft_type, n_modes, n_trans, dtype=scomplex)
-        self.bwdPlan = fn.Plan(3-nufft_type, n_modes, n_trans, dtype=scomplex)
+        self.fwdPlan = fn.Plan(nufft_type, n_modes, n_trans, eps, isign if isign is not None else None, dtype=scomplex)
+        self.bwdPlan = fn.Plan(3-nufft_type, n_modes, n_trans, eps, -isign if isign is not None else None, dtype=scomplex)
         
         self.fn = fn
         self.nAx = nAx
@@ -41,14 +53,17 @@ class Nufft(nn.Module):
         Set points for internal nufft plans.
 
         Args:
-            pts (Tensor | NDArray): see `finufft.Plan.setpts()`
+            pts (Tensor | NDArray): Sampling pattern in `[nAx,nK]`
         """
-        pts = torch.as_tensor(pts)
+        pts = torch.as_tensor(pts).contiguous()
         
         if self.device.type=="cpu":
-            _pts = pts.contiguous().numpy()
+            _pts = pts.cpu().numpy()
         elif self.device.type=="cuda":
-            _pts = pts.contiguous().to(self.device)
+            _pts = pts.cuda() # (self.device)
+            """
+            NOTE: In current cufinufft version, `_pts` must be on "cuda:0", no matter what device you use.
+            """
         else:
             raise NotImplementedError("device")
         
@@ -56,6 +71,12 @@ class Nufft(nn.Module):
         self.bwdPlan.setpts(*_pts[:self.nAx,:])
         
     def forward(self, x:Tensor):
+        """
+        Perform NUFFT on signal `x`
+
+        Args:
+            x (Tensor): Target signal. Shape: `[n_trans,nK]` when `nufft_type=1`; `[n_trans,*n_modes]` when `nufft_type=2`
+        """
         return NufftAutogradFunc.apply(self.fwdPlan, self.bwdPlan, x)
 
 class NufftAutogradFunc(torch.autograd.Function):
