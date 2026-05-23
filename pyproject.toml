@@ -1,7 +1,7 @@
 [project]
 name = "torchfinufft-ryan"
-version = "2.2.0"
-dependencies = ["numpy", "torch", "finufft"]
+version = "2.2.1"
+dependencies = ["numpy", "torch", "finufft", "mrarbgrad", "mrarbdcf", "mrphantom"]
 
 description = "NUFFT module for PyTorch."
 keywords = ["NUFFT", "Toeplitz", "non-Carteisan", "mri", "PyTorch"]

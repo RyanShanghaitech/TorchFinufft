@@ -6,11 +6,10 @@ from torch import Tensor
 
 import torchfinufft as tfn
 from time import time
-import mrphantom as pht
+import mrphantom as mpt
 import mrarbgrad as mag
 
 # parameters
-useToeplitz = 0
 nAx = 2; nPix = 256
 sDev = "cuda" if torch.cuda.is_available() else "cpu"
 dev = torch.device(sDev)
@@ -28,9 +27,9 @@ else:
 
 # generate slime phantom
 random.seed(0)
-arrPhant = pht.genPhant(nPix=nPix)
-arrM0 = pht.Enum2M0(arrPhant)*pht.genPhMap(nPix=nPix)
-tenM0 = torch.from_numpy(arrM0).to(dev, complex)
+arrPhant = mpt.genPhant(nPix=nPix)
+arrImg = mpt.Enum2M0(arrPhant)*mpt.genPhMap(nPix=nPix)
+tenImg = torch.from_numpy(arrImg).to(dev, complex)
 
 # Generate non-Cartesian trajectories
 lstArrG = mag.getG_Spiral(nPix=nPix,)[1]
@@ -44,14 +43,13 @@ arr2PiKT = 2*pi*arrK.T
 modNufft = tfn.Nufft(2, (nPix,)*nAx, 1, device=dev, dtype=complex)
 modNufft.setpts(arr2PiKT)
 with torch.no_grad():
-    tenS0:Tensor = modNufft(tenM0)
+    tenS0:Tensor = modNufft(tenImg)
 
 modLoss = tfn.ToeKspMSELoss(arrK, None, (nPix,)*nAx, tenS0, dev, complex)
 
 # Optimization
-tenM = torch.zeros((nPix,)*nAx, device=dev, dtype=complex, requires_grad=True)
-
-optimizer = torch.optim.SGD([tenM], lr=1e3); nIter = 1000
+tenImg_ = torch.zeros((nPix,)*nAx, device=dev, dtype=complex, requires_grad=True)
+optimizer = torch.optim.SGD([tenImg_], lr=1e3); nIter = 1000
 
 loss0 = -1; lstLoss = []
 def closure():
@@ -59,18 +57,14 @@ def closure():
     
     optimizer.zero_grad()
     
-    if useToeplitz:
-        loss = modLoss(tenM).mean()
-    else:
-        tenS = modNufft(tenM)
-        loss = torch.mean(torch.abs(tenS - tenS0)**2)
+    tenS = modNufft(tenImg_)
+    loss = torch.mean(torch.abs(tenS - tenS0)**2)
     
     if loss0<0: loss0 = loss.item()
     loss *= 1e0/loss0
     
-    lstLoss += [loss.item()]
-    
     loss.backward()
+    lstLoss += [loss.item()]
     return loss
     
 t = time()
@@ -84,17 +78,17 @@ print(f"Elapsed Time: {t:.3f}s")
 figure(figsize=(12,6), dpi=150)
 
 subplot(231)
-imshow(abs(arrM0), cmap='gray')
+imshow(abs(arrImg), cmap='gray')
 clim(0,1)
 title("Original")
 
-subplot(232);
+subplot(232)
 for i in range(len(lstArrK)): plot(*lstArrK[i].T[:nAx,:], ".-")
 axis("equal")
 title("K-space Trajectory")
 
 subplot(233)
-imshow(tenM.detach().abs().cpu(), cmap='gray')
+imshow(tenImg_.detach().abs().cpu(), cmap='gray')
 clim(0,1)
 title("Reconstructed")
 

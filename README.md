@@ -16,14 +16,10 @@ To install with pip:
 ```bash
 $ pip install torchfinufft-ryan
 ```
-Optionally, to enable CUDA computation, `cufinufft>=2.5.0` has to be installed. To solve for the density compensation function, I recommend my `mrarbdcf` package.
+Optionally, to enable CUDA computation, `cufinufft>=2.5.0` has to be installed. To solve for the density compensation function, I recommend my `mrarbdcf` package [4].
 
 ## Usage
-Please refer to the `exmaple` folder - there are minimal example(s) for tutorial. Please run:
-```bash
-$ pip install -r example/requirements.txt
-```
-to install essential packages for the examples.
+Please refer to the `exmaple` folder - there are minimal example(s) for tutorial.
 
 ## References
 [1] Barnett AH. Aliasing error of the kerne exp(β√(1-z²)) in the nonuniform fast Fourier transform. Applied and Computational Harmonic Analysis. 2021 Mar 1;51:1–16.
@@ -31,3 +27,5 @@ to install essential packages for the examples.
 [2] Barnett AH, Magland J, af Klinteberg L. A Parallel Nonuniform Fast Fourier Transform Library Based on an “Exponential of Semicircle" Kernel. SIAM J Sci Comput. 2019 Jan;41(5):C479–504.
 
 [3] Shih Y hsuan, Wright G, Anden J, Blaschke J, Barnett AH. cuFINUFFT: a load-balanced GPU library for general-purpose nonuniform FFTs. 2021 IEEE International Parallel and Distributed Processing Symposium Workshops (IPDPSW). 2021 June;688–97. 
+
+[4] Luo R, Hu P, Qi H. Sampling Density Compensation using Fast Fourier Deconvolution. In: Proceedings of the Cape Town - 2026 ISMRM-ISMRT Annual Meeting and Exhibition, Cape Town, South Africa. Program #461-03-015.

@@ -33,6 +33,10 @@ class Nufft(nn.Module):
         else:
             raise NotImplementedError("dtype")
         
+        if scomplex=="complex64": self.float = torch.float32
+        elif scomplex=="complex128": self.float = torch.float64
+        else: raise NotImplementedError("scomplex")
+        
         nAx = len(n_modes)
         self.device = torch.device(device)
         
@@ -55,7 +59,7 @@ class Nufft(nn.Module):
         Args:
             pts (Tensor | NDArray): Sampling pattern in `[nAx,nK]`
         """
-        pts = torch.as_tensor(pts).contiguous()
+        pts = torch.as_tensor(pts, dtype=self.float).contiguous()
         
         if self.device.type=="cpu":
             _pts = pts.cpu().numpy()

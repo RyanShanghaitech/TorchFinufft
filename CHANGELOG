@@ -1,3 +1,7 @@
+2.2.1 (May 23, 2026)
+1. Add data type enforcement in `setpts()` as it is necessary.
+2. Add packages necessary for examples as dependencies of this package so as to facilitate convenient example evaluation.
+
 2.2.0 (March 31, 2026)
 Add document string, add `isign` and `eps` parameter in `Nufft` module init function. Update MANIFEST.in. Fix multi-gpu bug. Update examples.
 
